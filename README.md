@@ -1,2 +1,2 @@
-# Discrete-Control
-Mix of various discrete-systems related problems, like Kalman Filters, LQR, ...
+# Discrete-Filters
+Comparing a discrete Low Pass filter and recursive averages
