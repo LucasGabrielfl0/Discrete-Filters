@@ -11,7 +11,7 @@ const float a2 = Kp + (Ts*Ki/2) + (2*Kd/Ts);
 float Out[4];
 float Error[4];
 
-void BilinearTransf(float input, float fdback)
+void BilinearTransf(float ref, float fdback)
 {
   Error[0] = ref - fdback;
   Out[0] = Out[2] + Error[2]*a0 + Error[1]*a1 + Error[0]*a2;
@@ -34,9 +34,8 @@ const float b2 = Kp + (Ts*Ki) + (Kd/Ts);
 float Out_e[3];
 float Error_e[3];
 
-void BackwardsEuler(float fdback, float ref)
+void BackwardsEuler(float ref, float fdback)
 {
-
   Error[0] = ref - fdback;
   Out_e[0] = Out_e[1] + Error_e[2]*b0 + Error_e[1]*b1 + Error_e[0]*b2;
 
