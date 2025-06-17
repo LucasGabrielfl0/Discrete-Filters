@@ -1,2 +1,2 @@
 # Discrete-Filters
-Comparing a discrete Low Pass filter and recursive averages
+Comparing a few different algorithms to filter noisy data using MATLAB
