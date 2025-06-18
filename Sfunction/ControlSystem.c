@@ -28,20 +28,22 @@
 
 // Previous VALUES
 #define u_k1    x_kn[0]     // u[k-1]
-#define e_k1    x_kn[1]     // e[k-1]
-#define e_k2    x_kn[2]     // e[k-2]
+#define u_k1    x_kn[1]     // u[k-2]
+
+#define e_k1    x_kn[2]     // e[k-1]
+#define e_k2    x_kn[3]     // e[k-2]
 
 /*=======================================  CONTROL ============================================== */
 // Control Variables:
-#define Kp  1
-#define Kd  1
-#define Ki  1
-#define Ts  1       // Sample Period in seconds
+// #define Kp  1       //
+// #define Kd  1       //
+// #define Ki  1       //
+// #define Ts  1       // Sample Period in seconds
 
 // Tustin
-#define a0  ( Kp+ (Ts*Ki) + (Kd/Ts) )
-#define a1  ( (-Kp) - (2*Kd/Ts)     )
-#define a2  ( Kd/Ts                 )
+// #define a0  ( Kp+ (Ts*Ki) + (Kd/Ts) )
+// #define a1  ( (-Kp) - (2*Kd/Ts)     )
+// #define a2  ( Kd/Ts                 )
 
 
 // Part 1: Define ports
@@ -124,25 +126,51 @@ static void mdlInitializeConditions(SimStruct *S)
 // Part 4: Function Call and Outputs
 static void mdlOutputs(SimStruct *S, int_T tid)
 {
-    InputRealPtrsType uPtrs = ssGetInputPortRealSignalPtrs(S, 0);
-    real_T input = *uPtrs[0];
+    /*================================= EXTERNAL VARIABLES ==============================*/
+    real_T            *y      = ssGetOutputPortRealSignal(S, 0);        // Pointer for the Block's Output
+    real_T            *x      = ssGetRealDiscStates(S);                 // Pointer for the Discrete States [storage for variables]
+    InputRealPtrsType uPtrs   = ssGetInputPortRealSignalPtrs(S, 0);     // Pointer for the Block's Input Signals
 
-    /*================================= INPUT VARIABLES ==============================*/
+    // Control Settings
+    real_T Kp 	              = *mxGetPr(DEF_PARAM1(S));
+    real_T Ki                 = *mxGetPr(DEF_PARAM2(S));
+    real_T Kd                 = *mxGetPr(DEF_PARAM2(S));
+    real_T Ts                 = *mxGetPr(DEF_PARAM3(S));
+    
+    /*================================= INTERNAL VARIABLES ==============================*/
+    // Control Algorithm [Euler]
+    // real_T a0   = ( Kp + (Ts*Ki) + (Kd/Ts) );
+    // real_T a1   = ( (-Kp) - (2*Kd/Ts)      );
+    // real_T a2   = ( Kd/Ts                  );
+
+    // Control Algorithm Parameters [Tustin]
+    real_T a0   = ( Kp + (Ts*Ki/2) + (2*Kd/Ts)  );
+    real_T a1   = ( (Ki*Ts) - (4*Kd/Ts)         );
+    real_T a2   = ( -Kp + (Ts*Ki/2) + (2*Kd/Ts) );
+
     // Inputs
-    real_T RPM_Vel = U(0);
-    real_T RPM_Ref = U(1);
+    real_T RPM_c     = *uPtrs[0];            // Current Plant Signal 
+    real_T RPM_Ref   = *uPtrs[1];            // Current Reference Signal
 
-    /*================================= OTHER VARIABLES ==============================*/
-
-    real_T *y = ssGetOutputPortRealSignal(S, 0);
-
+    // Other variables
+    real_T Error_c  = 0;  // Current Error
 
     /*================================= CONTROL SYSTEM ==============================*/
     // Implement Control
+    Error_c = RPM_Ref - RPM_c;
+    u_k = u_k2 + Error_c[2]*a2 + Error_c[1]*a1 + Error_c[0]*a0;
 
 
+    // Update Variables
+    u_k1 = u_k;         // current becomes last
+
+    e_k2 = e_k1;        // Last becomes before last
+    e_k1 = Error_c;     // current becomes last
 
     /*================================= Outputs ==============================*/
+    y[0] = u_k;           //
+    y[1] = Error_c;         //
+
 }
 
 
