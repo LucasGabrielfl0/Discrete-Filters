@@ -11,12 +11,19 @@
 #define S_FUNCTION_LEVEL 2
 
 #include "simstruc.h"           //
-#include "PIDControl.h"         // PID, PI, PD
+#include "math.h"
+
+// #include "PIDControl.h"         // PID, PI, PD
+
+#ifndef MATLAB_MEX_FILE
+#include <brtenv.h>
+#endif
+
 
 // Input and Output Width 
-#define N_INPUTS    2
-#define N_OUTPUTS   2
-#define N_PARAMS    2
+#define N_INPUTS    2       // Number of Inputs (2: Reference Signal, Controlled Variable Signal)
+#define N_OUTPUTS   2       // Number of Outputs (2: Control Signal, Error Signal)
+#define N_PARAMS    4       // Number of Parameters (Kp, Ki, Kd, Ts)
 
 /*====================================  STATES ============================================== */
 // Number of Discrete States [Number of values saved in memory between steps]
@@ -26,10 +33,9 @@
 #define u_k     x_k[0]       // u[k]
 #define e_k     x_k[1]       // e[k]
 
-// Previous VALUES
+// Previous Values [Memory Storage Array]
 #define u_k1    x_kn[0]     // u[k-1]
-#define u_k1    x_kn[1]     // u[k-2]
-
+#define u_k2    x_kn[1]     // u[k-2]
 #define e_k1    x_kn[2]     // e[k-1]
 #define e_k2    x_kn[3]     // e[k-2]
 
@@ -49,39 +55,30 @@
 // Part 1: Define ports
 static void mdlInitializeSizes(SimStruct *S)
 {
-    // Parameters Setup
+    // Set Number of Expected paramters (
     ssSetNumSFcnParams(S, N_PARAMS);  
     if (ssGetNumSFcnParams(S) != ssGetSFcnParamsCount(S)) 
     {
         return;
     }
 
+    //(Xk, Xkn...)
+    ssSetNumContStates(S, 0);
+    ssSetNumDiscStates(S, DSTATES);
+
     // Input Port Setup
-    ssSetNumInputPorts(S, 1);                       // Number Of Inputs
-    ssSetInputPortWidth(S, 0, 1);                   // Number of elements in the input array
-    ssSetInputPortDirectFeedThrough(S, 0, 1);       // If the current output depends on current input
+    if (!ssSetNumInputPorts(S, 1)) return;              // Number Of Inputs [in this case, 1 array]
+    ssSetInputPortWidth(S, 0, N_INPUTS);                // Number of elements in the input array
+    ssSetInputPortDirectFeedThrough(S, 0, 1);           // If the current output depends on current input
 
     // Output Port Setup
-    ssSetNumOutputPorts(S, 1);
-    ssSetOutputPortWidth(S, 0, 1);
+    if (!ssSetNumOutputPorts(S, 1)) return;
+    ssSetOutputPortWidth(S, 0, N_OUTPUTS);
 
     // Number of different sample times [for 2 controllers running at different speed]
     ssSetNumSampleTimes(S, 1);
-
-
-
-    // ADD  ====================
-    ssSetNumContStates(S, 0);
-    ssSetNumDiscStates(S, DSTATES);
     
-    if (!ssSetNumInputPorts(S, 1)) return; 
-    ssSetInputPortWidth(S, 0, NINPUTS);
-    ssSetInputPortDirectFeedThrough(S, 0, 1);
-    
-    if (!ssSetNumOutputPorts(S, 1)) return;
-    ssSetOutputPortWidth(S, 0, NOUTPUTS);
-    
-    ssSetNumSampleTimes(S, 1);
+    // ??
     ssSetNumRWork(S, 0);
     ssSetNumIWork(S, 0);
     ssSetNumPWork(S, 0);
@@ -90,18 +87,6 @@ static void mdlInitializeSizes(SimStruct *S)
     
     /* Take care when specifying exception free code - see sfuntmpl_doc.c */
     ssSetOptions(S, SS_OPTION_EXCEPTION_FREE_CODE);
-
- // add end ===============================
-
-
-
-
-
-
-
-
-
-
 }
 
 // Part 2: Set the sample time (Chosen or Inherited)
@@ -116,8 +101,12 @@ static void mdlInitializeSampleTimes(SimStruct *S)
 #define MDL_INITIALIZE_CONDITIONS
 static void mdlInitializeConditions(SimStruct *S) 
 {
-    real_T *x0 = ssGetRealDiscStates(S);            // ?  
+    // Gets pointer to the Memory Storage Array
+    real_T *x_kn = ssGetRealDiscStates(S);
+    
+    // Uses Pointer to initialize Memory Storage Array
     u_k1 = 0.0;
+    u_k2 = 0.0;
     e_k1 = 0.0;
     e_k2 = 0.0;
 }
