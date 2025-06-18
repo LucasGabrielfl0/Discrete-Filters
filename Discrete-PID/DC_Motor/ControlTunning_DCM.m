@@ -52,6 +52,8 @@ grid on
 
 
 
+BLDC_Num= cell2mat(BLDCM_tfz.Numerator);
+BLDC_Den= cell2mat(BLDCM_tfz.Denominator);
 
 
 
