@@ -33,7 +33,7 @@
 #define DEF_PARAM3(S)   ssGetSFcnParam(S, 2)
 #define DEF_PARAM4(S)   ssGetSFcnParam(S, 3)
 
-
+#define U(element) (*uPtrs[element])
 
 // Previous Values [Memory Storage Array]
 #define u_k1        x_k[0]     // u[k-1]
@@ -140,10 +140,15 @@ static void mdlOutputs(SimStruct *S, int_T tid)
     // real_T a1   = ( (-Kp) - (2*Kd/Ts)      );
     // real_T a2   = ( Kd/Ts                  );
 
-    // Control Algorithm Parameters [Tustin]
-    real_T a0   = ( Kp + (Ts*Ki/2) + (2*Kd/Ts)  );
-    real_T a1   = ( (Ki*Ts) - (4*Kd/Ts)         );
-    real_T a2   = ( -Kp + (Ts*Ki/2) + (2*Kd/Ts) );
+    // PID Control Algorithm Parameters [Tustin] : 
+    // real_T a0   = ( Kp + (Ts*Ki/2) + (2*Kd/Ts)  );
+    // real_T a1   = ( (Ki*Ts) - (4*Kd/Ts)         );
+    // real_T a2   = ( -Kp + (Ts*Ki/2) + (2*Kd/Ts) );
+
+    // PI Control Algorithm Parameters [Tustin]: u_k = u_k1 + e_k1*a1 + e_k*a0;
+    real_T a0   = ( Kp + (Ts*Ki/2) );
+    real_T a1   = ( (-Kp) + (Ts*Ki/2) );
+
 
     // Other variables
     real_T e_k  = 0;  // Current Error
@@ -151,13 +156,19 @@ static void mdlOutputs(SimStruct *S, int_T tid)
     
     /*================================= CONTROL SYSTEM ==============================*/
     // Read Inputs
-    real_T RPM_c     = *uPtrs[0];            // Current Plant Signal 
-    real_T RPM_Ref   = *uPtrs[1];            // Current Reference Signal
+    // real_T RPM_c     = *uPtrs[0];            // Current Plant Signal 
+    // real_T RPM_Ref   = *uPtrs[1];            // Current Reference Signal
+
+    real_T RPM_Ref   = U(0);            // Current Reference Signal
+    real_T RPM_c     = U(1);            // Current Plant Signal 
+
 
     // Implement Control
     e_k = RPM_Ref - RPM_c;
-    u_k = u_k2 + e_k2*a2 + e_k1*a1 + e_k*a0;
-
+    // u_k = u_k2 + e_k2*a2 + e_k1*a1 + e_k*a0;    // PID
+    // u_k = u_k1 + e_k1*a1 + e_k*a0;    // PI
+    u_k = u_k1 - e_k1*0.001028 + e_k*0.001028;    // PI
+    // u_k = RPM_Ref/360;
 
     // Update Variables
     e_k2 = e_k1;        // Previous becomes before previous
@@ -167,8 +178,8 @@ static void mdlOutputs(SimStruct *S, int_T tid)
     e_k1 = e_k;         // current becomes previous
 
     /*================================= Outputs ==============================*/
-    y[0] = u_k;         // 
-    y[1] = e_k;         //
+    y[0] = u_k;         // Current Control Signal 
+    y[1] = e_k;         // Current Error Signal
 
 }
 
