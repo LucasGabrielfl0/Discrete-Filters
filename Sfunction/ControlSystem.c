@@ -27,17 +27,25 @@
 
 /*====================================  STATES ============================================== */
 // Number of Discrete States [Number of values saved in memory between steps]
-#define DSTATES 3
+#define DSTATES 4           // [Elements in x_kn]
+#define DEF_PARAM1(S)   ssGetSFcnParam(S, 0)
+#define DEF_PARAM2(S)   ssGetSFcnParam(S, 1)
+#define DEF_PARAM3(S)   ssGetSFcnParam(S, 2)
+#define DEF_PARAM4(S)   ssGetSFcnParam(S, 3)
 
-// Current Values
-#define u_k     x_k[0]       // u[k]
-#define e_k     x_k[1]       // e[k]
+
 
 // Previous Values [Memory Storage Array]
-#define u_k1    x_kn[0]     // u[k-1]
-#define u_k2    x_kn[1]     // u[k-2]
-#define e_k1    x_kn[2]     // e[k-1]
-#define e_k2    x_kn[3]     // e[k-2]
+#define u_k1        x_k[0]     // u[k-1]
+#define u_k2        x_k[1]     // u[k-2]
+#define e_k1        x_k[2]     // e[k-1]
+#define e_k2        x_k[3]     // e[k-2]
+
+// Memory Initialization array [Used only as Initial values]
+#define u0_k1       x0_k[0]     // u0[k-1]
+#define u0_k2       x0_k[1]     // u0[k-2]
+#define e0_k1       x0_k[2]     // e0[k-1]
+#define e0_k2       x0_k[3]     // e0[k-2]
 
 /*=======================================  CONTROL ============================================== */
 // Control Variables:
@@ -62,9 +70,9 @@ static void mdlInitializeSizes(SimStruct *S)
         return;
     }
 
-    //(Xk, Xkn...)
-    ssSetNumContStates(S, 0);
-    ssSetNumDiscStates(S, DSTATES);
+    //Set memory storage array (X_k)
+    ssSetNumContStates(S, 0);               // No continous states (its a discre time control)
+    ssSetNumDiscStates(S, DSTATES);         // How many elements in the state array x_k
 
     // Input Port Setup
     if (!ssSetNumInputPorts(S, 1)) return;              // Number Of Inputs [in this case, 1 array]
@@ -78,12 +86,12 @@ static void mdlInitializeSizes(SimStruct *S)
     // Number of different sample times [for 2 controllers running at different speed]
     ssSetNumSampleTimes(S, 1);
     
-    // ??
-    ssSetNumRWork(S, 0);
-    ssSetNumIWork(S, 0);
-    ssSetNumPWork(S, 0);
-    ssSetNumModes(S, 0);
-    ssSetNumNonsampledZCs(S, 0);
+    // Internal Working Memory setup
+    ssSetNumRWork(S, 0);                // Real Work
+    ssSetNumIWork(S, 0);                // Interger Work
+    ssSetNumPWork(S, 0);                // Pointer Work
+    ssSetNumModes(S, 0);                // Modes switching ()
+    ssSetNumNonsampledZCs(S, 0);        // Zero Crossings, not sure
     
     /* Take care when specifying exception free code - see sfuntmpl_doc.c */
     ssSetOptions(S, SS_OPTION_EXCEPTION_FREE_CODE);
@@ -102,13 +110,13 @@ static void mdlInitializeSampleTimes(SimStruct *S)
 static void mdlInitializeConditions(SimStruct *S) 
 {
     // Gets pointer to the Memory Storage Array
-    real_T *x_kn = ssGetRealDiscStates(S);
+    real_T *x0_k = ssGetRealDiscStates(S);
     
-    // Uses Pointer to initialize Memory Storage Array
-    u_k1 = 0.0;
-    u_k2 = 0.0;
-    e_k1 = 0.0;
-    e_k2 = 0.0;
+    // Uses Pointer to Set Initial Values to the initial arrray [x0_k] that gets copied into the storage Array [X_k]
+    u0_k1 = 0.0;
+    u0_k2 = 0.0;
+    e0_k1 = 0.0;
+    e0_k2 = 0.0;
 }
 
 
@@ -117,14 +125,14 @@ static void mdlOutputs(SimStruct *S, int_T tid)
 {
     /*================================= EXTERNAL VARIABLES ==============================*/
     real_T            *y      = ssGetOutputPortRealSignal(S, 0);        // Pointer for the Block's Output
-    real_T            *x      = ssGetRealDiscStates(S);                 // Pointer for the Discrete States [storage for variables]
+    real_T            *x_k    = ssGetRealDiscStates(S);                 // Pointer for the Discrete States [storage for variables]
     InputRealPtrsType uPtrs   = ssGetInputPortRealSignalPtrs(S, 0);     // Pointer for the Block's Input Signals
 
     // Control Settings
     real_T Kp 	              = *mxGetPr(DEF_PARAM1(S));
     real_T Ki                 = *mxGetPr(DEF_PARAM2(S));
-    real_T Kd                 = *mxGetPr(DEF_PARAM2(S));
-    real_T Ts                 = *mxGetPr(DEF_PARAM3(S));
+    real_T Kd                 = *mxGetPr(DEF_PARAM3(S));
+    real_T Ts                 = *mxGetPr(DEF_PARAM4(S));
     
     /*================================= INTERNAL VARIABLES ==============================*/
     // Control Algorithm [Euler]
@@ -137,28 +145,30 @@ static void mdlOutputs(SimStruct *S, int_T tid)
     real_T a1   = ( (Ki*Ts) - (4*Kd/Ts)         );
     real_T a2   = ( -Kp + (Ts*Ki/2) + (2*Kd/Ts) );
 
-    // Inputs
+    // Other variables
+    real_T e_k  = 0;  // Current Error
+    real_T u_k  = 0;  // Current Control Signal
+    
+    /*================================= CONTROL SYSTEM ==============================*/
+    // Read Inputs
     real_T RPM_c     = *uPtrs[0];            // Current Plant Signal 
     real_T RPM_Ref   = *uPtrs[1];            // Current Reference Signal
 
-    // Other variables
-    real_T Error_c  = 0;  // Current Error
-
-    /*================================= CONTROL SYSTEM ==============================*/
     // Implement Control
-    Error_c = RPM_Ref - RPM_c;
-    u_k = u_k2 + Error_c[2]*a2 + Error_c[1]*a1 + Error_c[0]*a0;
+    e_k = RPM_Ref - RPM_c;
+    u_k = u_k2 + e_k2*a2 + e_k1*a1 + e_k*a0;
 
 
     // Update Variables
-    u_k1 = u_k;         // current becomes last
+    e_k2 = e_k1;        // Previous becomes before previous
+    u_k1 = u_k;         // current becomes previous
 
-    e_k2 = e_k1;        // Last becomes before last
-    e_k1 = Error_c;     // current becomes last
+    e_k2 = e_k1;        // Previous becomes before previous
+    e_k1 = e_k;         // current becomes previous
 
     /*================================= Outputs ==============================*/
-    y[0] = u_k;           //
-    y[1] = Error_c;         //
+    y[0] = u_k;         // 
+    y[1] = e_k;         //
 
 }
 
@@ -166,8 +176,9 @@ static void mdlOutputs(SimStruct *S, int_T tid)
 // Part 5: 
 #define MDL_UPDATE
 static void mdlUpdate(SimStruct *S, int_T tid) {
-    real_T            *x       = ssGetRealDiscStates(S);                    //
-    InputRealPtrsType uPtrs    = ssGetInputPortRealSignalPtrs(S, 0);        //
+    // Update function called after output, but not doing anything
+    real_T            *x_k       = ssGetRealDiscStates(S);
+    InputRealPtrsType uPtrs      = ssGetInputPortRealSignalPtrs(S, 0);
 }
 
 
